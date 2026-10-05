@@ -1,6 +1,7 @@
 const express = require("express");
 const { z } = require("zod");
 const wrap = require("../utils/asyncHandler");
+const { segmentOf, paginate } = require("../services/analyticsService");
 
 function customerRouter({ customers, orders, communications, email, ai }) {
   const router = express.Router();
@@ -16,14 +17,20 @@ function customerRouter({ customers, orders, communications, email, ai }) {
     return { customer, orders: custOrders, communications: comms, notes };
   }
 
+  // Paginated: ?search=&segment=vip|at-risk|new|regular&sort=spent|orders|recent&page=&pageSize=
   router.get("/", wrap(async (req, res) => {
-    res.json(await customers.list(req.query.search));
+    const { search, segment, sort = "recent", page, pageSize } = req.query;
+    let rows = (await customers.list(search, 1000)).map((c) => ({ ...c, segment: segmentOf(c) }));
+    if (segment) rows = rows.filter((c) => c.segment === segment);
+    if (sort === "spent") rows.sort((a, b) => b.total_spent - a.total_spent);
+    else if (sort === "orders") rows.sort((a, b) => b.order_count - a.order_count);
+    res.json(paginate(rows, page, pageSize));
   }));
 
   router.get("/:id", wrap(async (req, res) => {
     const ctx = await loadContext(req.params.id);
     if (!ctx) return res.status(404).json({ error: "Customer not found" });
-    res.json({ ...ctx.customer, orders: ctx.orders, communications: ctx.communications, notes: ctx.notes });
+    res.json({ ...ctx.customer, segment: segmentOf(ctx.customer), orders: ctx.orders, communications: ctx.communications, notes: ctx.notes });
   }));
 
   router.patch("/:id/tags", wrap(async (req, res) => {

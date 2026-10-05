@@ -1,0 +1,48 @@
+# One-command run:  docker compose up --build   ->  http://localhost:3000
+# Put secrets in a .env file next to this one (see .env.example); compose reads it automatically.
+services:
+  db:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-crm-root-pass}
+    volumes:
+      - dbdata:/var/lib/mysql
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${DB_PASSWORD:-crm-root-pass}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: 3000
+      DB_HOST: db
+      DB_USER: root
+      DB_PASSWORD: ${DB_PASSWORD:-crm-root-pass}
+      DB_NAME: crm_woocommerce
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
+      WOO_WEBHOOK_SECRET: ${WOO_WEBHOOK_SECRET:-change-me}
+      DELAY_DAYS: ${DELAY_DAYS:-3}
+      FOLLOWUP_INTERVAL_MINUTES: ${FOLLOWUP_INTERVAL_MINUTES:-60}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-claude-sonnet-5-5}
+      WOO_URL: ${WOO_URL:-}
+      WOO_CONSUMER_KEY: ${WOO_CONSUMER_KEY:-}
+      WOO_CONSUMER_SECRET: ${WOO_CONSUMER_SECRET:-}
+    restart: unless-stopped
+
+volumes:
+  dbdata:

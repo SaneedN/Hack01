@@ -75,3 +75,34 @@ CREATE TABLE IF NOT EXISTS users (
   role VARCHAR(30) NOT NULL DEFAULT 'staff',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS tasks (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  customer_id INT NULL,
+  order_id INT NULL,
+  title VARCHAR(255) NOT NULL,
+  source VARCHAR(30) NOT NULL DEFAULT 'manual',
+  status VARCHAR(20) NOT NULL DEFAULT 'open',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+  FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS triage_items (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  customer_id INT NULL,
+  order_id INT NULL,
+  message TEXT NOT NULL,
+  category VARCHAR(30) NOT NULL,
+  urgency VARCHAR(20) NOT NULL DEFAULT 'normal',
+  summary TEXT NOT NULL,
+  draft_reply TEXT NOT NULL,
+  suggested_task VARCHAR(255) NULL,
+  steps JSON NULL,
+  source VARCHAR(20) NOT NULL DEFAULT 'rules',
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  resolved_at TIMESTAMP NULL,
+  FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL,
+  FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL
+);

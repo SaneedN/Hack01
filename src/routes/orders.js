@@ -1,11 +1,18 @@
 const express = require("express");
 const wrap = require("../utils/asyncHandler");
+const { paginate } = require("../services/analyticsService");
 
 function orderRouter({ orders }) {
   const router = express.Router();
 
   router.get("/", wrap(async (req, res) => {
-    res.json(await orders.list({ status: req.query.status }));
+    const { status, search, page, pageSize } = req.query;
+    let rows = await orders.list({ status, limit: 1000 });
+    if (search) {
+      const q = String(search).toLowerCase();
+      rows = rows.filter((o) => `${o.woocommerce_order_id} ${o.first_name || ""} ${o.last_name || ""} ${o.email || ""}`.toLowerCase().includes(q));
+    }
+    res.json(paginate(rows, page, pageSize));
   }));
 
   // must come before "/:id"

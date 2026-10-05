@@ -7,15 +7,31 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <aside>
-    <h1>Woo CRM</h1>
-    <nav>
-      <a href="#/" data-nav="dashboard">Dashboard</a>
-      <a href="#/customers" data-nav="customers">Customers</a>
-      <a href="#/orders" data-nav="orders">Orders</a>
-    </nav>
-  </aside>
-  <main id="view"><p class="muted">Loading...</p></main>
+  <div id="login" class="login" hidden>
+    <div class="card login-box">
+      <h2>Woo CRM</h2>
+      <p class="muted">Staff sign in</p>
+      <input id="loginEmail" type="email" placeholder="Email" autocomplete="username" />
+      <input id="loginPassword" type="password" placeholder="Password" autocomplete="current-password" />
+      <button id="loginBtn">Sign in</button>
+      <p id="loginError" class="error"></p>
+    </div>
+  </div>
+  <div id="shell" class="shell" hidden>
+    <aside>
+      <h1>Woo CRM</h1>
+      <nav>
+        <a href="#/" data-nav="dashboard">Dashboard</a>
+        <a href="#/customers" data-nav="customers">Customers</a>
+        <a href="#/orders" data-nav="orders">Orders</a>
+        <a href="#/triage" data-nav="triage">AI Triage <span id="triageCount" class="pill" hidden></span></a>
+        <a href="#/tasks" data-nav="tasks">Tasks</a>
+        <a href="#/team" data-nav="team" id="teamNav" hidden>Team &amp; Admin</a>
+      </nav>
+      <div class="me"><span id="meName"></span><br><span id="meRole" class="muted"></span><br><a href="#" id="logout">Sign out</a></div>
+    </aside>
+    <main id="view"><p class="muted">Loading...</p></main>
+  </div>
   <div id="toast"></div>
   <script src="app.js"></script>
 </body>

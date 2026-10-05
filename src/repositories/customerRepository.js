@@ -30,6 +30,11 @@ function createCustomerRepository(pool) {
       return rows[0] ? withNumbers(rows[0]) : null;
     },
 
+    async findByEmail(email) {
+      const [rows] = await pool.query(`${WITH_STATS} WHERE c.email = ? GROUP BY c.id`, [String(email).trim().toLowerCase()]);
+      return rows[0] ? withNumbers(rows[0]) : null;
+    },
+
     async list(search, limit = 200) {
       const q = `%${search || ""}%`;
       const where = search

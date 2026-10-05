@@ -42,6 +42,11 @@ function createOrderRepository(pool) {
       return rows;
     },
 
+    async findById(id) {
+      const [rows] = await pool.query("SELECT * FROM orders WHERE id = ?", [id]);
+      return rows[0] || null;
+    },
+
     async listByCustomer(customerId) {
       const [rows] = await pool.query(
         "SELECT * FROM orders WHERE customer_id = ? ORDER BY order_date DESC, id DESC",

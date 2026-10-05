@@ -9,3 +9,6 @@
 - AI output is advisory: drafts are shown to staff and never sent automatically. AI code must have a rule-based fallback.
 - Every new service gets unit tests; every new route gets an e2e test using `createApp` with in-memory repos.
 - Escape all user data in the dashboard (`esc()`). Never commit secrets; add new env vars to `.env.example`.
+- Auth: all `/api` routes (except login) require a JWT when `authService` is passed to `createApp`; admin-only routes use `requireRole()`. New routes go behind it by default.
+- The triage agent only reads data (tools are read-only) and its output is queued as `pending`: a human approves before any email is sent. It must keep its rules fallback.
+- Bulk imports (Woo sync) use a silent event bus so they never trigger customer emails.

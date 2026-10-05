@@ -9,6 +9,11 @@ function createCommunicationRepository(pool) {
       return rows[0];
     },
 
+    async existsForOrder(orderId, type) {
+      const [rows] = await pool.query("SELECT 1 FROM communications WHERE order_id = ? AND type = ? LIMIT 1", [orderId, type]);
+      return rows.length > 0;
+    },
+
     async listByCustomer(customerId) {
       const [rows] = await pool.query(
         "SELECT * FROM communications WHERE customer_id = ? ORDER BY created_at DESC, id DESC",

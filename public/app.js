@@ -9,16 +9,80 @@ const badge = (s) => `<span class="badge ${esc(s)}">${esc(s)}</span>`;
 const fullName = (c) => `${c.first_name || ""} ${c.last_name || ""}`.trim() || c.email;
 const tagList = (t) => (t ? t.split(",").filter(Boolean) : []);
 
+let token = localStorage.getItem("crm_token");
+let me = null;
+const isAdmin = () => me && me.role === "admin";
+
 async function api(path, opts = {}) {
   const res = await fetch("/api" + path, {
     method: opts.method || "GET",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(token ? { Authorization: "Bearer " + token } : {}) },
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401 && !path.startsWith("/auth/login")) { showLogin(); throw new Error("Please sign in"); }
   if (!res.ok) throw new Error(data.error || res.statusText);
   return data;
 }
+
+const segBadge = (s) => `<span class="seg ${esc(s)}">${esc(s)}</span>`;
+
+function pager(p, onPage) {
+  const id = "pg" + Math.random().toString(36).slice(2, 7);
+  setTimeout(() => {
+    document.getElementById(id + "p")?.addEventListener("click", () => onPage(p.page - 1));
+    document.getElementById(id + "n")?.addEventListener("click", () => onPage(p.page + 1));
+  });
+  return `<div class="pager"><span class="muted">${p.total} total &middot; page ${p.page} of ${p.pages}</span>
+    <button class="secondary" id="${id}p" ${p.page <= 1 ? "disabled" : ""}>Prev</button>
+    <button class="secondary" id="${id}n" ${p.page >= p.pages ? "disabled" : ""}>Next</button></div>`;
+}
+
+/* Inline SVG bar chart: no chart library needed */
+function barChart(rows) {
+  const w = 600, h = 160, pad = 24, max = Math.max(...rows.map((r) => r.revenue), 1);
+  const bw = (w - pad * 2) / rows.length;
+  return `<svg class="chart" viewBox="0 0 ${w} ${h + 22}" role="img" aria-label="Revenue per day, last 14 days">
+    ${rows.map((r, i) => {
+      const bh = Math.round((r.revenue / max) * h);
+      return `<rect x="${pad + i * bw + 3}" y="${h - bh}" width="${bw - 6}" height="${bh}" rx="3" fill="#4f46e5"><title>${esc(r.date)}: ${money(r.revenue)} (${r.orders} orders)</title></rect>
+        ${i % 2 === 0 ? `<text x="${pad + i * bw + bw / 2}" y="${h + 15}" font-size="10" text-anchor="middle" fill="#6b7280">${esc(r.date.slice(5))}</text>` : ""}`;
+    }).join("")}</svg>`;
+}
+
+const statusBars = (counts) => {
+  const entries = Object.entries(counts), max = Math.max(...entries.map(([, n]) => n), 1);
+  return `<div class="bars">${entries.map(([s, n]) => `<div class="bar-row"><span>${esc(s)}</span><i style="width:${(n / max) * 200}px"></i><b>${n}</b></div>`).join("") || '<p class="muted">No orders yet.</p>'}</div>`;
+};
+
+/* ---------- auth ---------- */
+function showLogin() {
+  token = null; me = null; localStorage.removeItem("crm_token");
+  document.getElementById("shell").hidden = true;
+  document.getElementById("login").hidden = false;
+}
+async function boot() {
+  if (!token) return showLogin();
+  try { me = await api("/auth/me"); } catch { return showLogin(); }
+  document.getElementById("login").hidden = true;
+  document.getElementById("shell").hidden = false;
+  document.getElementById("meName").textContent = me.name;
+  document.getElementById("meRole").textContent = me.role;
+  document.getElementById("teamNav").hidden = !isAdmin();
+  route();
+}
+document.getElementById("loginBtn").onclick = async () => {
+  const err = document.getElementById("loginError");
+  err.textContent = "";
+  try {
+    const r = await api("/auth/login", { method: "POST", body: { email: document.getElementById("loginEmail").value, password: document.getElementById("loginPassword").value } });
+    token = r.token; localStorage.setItem("crm_token", token);
+    document.getElementById("loginPassword").value = "";
+    boot();
+  } catch (e) { err.textContent = e.message; }
+};
+document.getElementById("loginPassword").addEventListener("keydown", (e) => { if (e.key === "Enter") document.getElementById("loginBtn").click(); });
+document.getElementById("logout").onclick = (e) => { e.preventDefault(); showLogin(); };
 
 function toast(msg) {
   const t = document.getElementById("toast");
@@ -36,6 +100,8 @@ const ordersTable = (rows, showCustomer = true) => `
 /* ---------- views ---------- */
 async function dashboardView() {
   const d = await api("/dashboard");
+  const pc = document.getElementById("triageCount");
+  pc.hidden = !d.pendingTriage; pc.textContent = d.pendingTriage;
   $view.innerHTML = `
     <h2>Dashboard</h2>
     <div class="grid stats">
@@ -43,6 +109,14 @@ async function dashboardView() {
       <div class="card stat"><span class="muted">Orders</span><b>${d.orders}</b></div>
       <div class="card stat"><span class="muted">Revenue</span><b>${money(d.revenue, d.currency)}</b></div>
       <div class="card stat"><span class="muted">Delayed (>${d.delayDays}d)</span><b>${d.delayedOrders.length}</b></div>
+      <div class="card stat"><span class="muted">Open tasks</span><b>${d.openTasks}</b></div>
+      <div class="card stat"><span class="muted">Awaiting approval</span><b>${d.pendingTriage}</b></div>
+    </div>
+    <div class="grid two">
+      <div class="card"><h3>Revenue, last 14 days</h3>${barChart(d.revenueByDay)}</div>
+      <div class="card"><h3>Orders by status</h3>${statusBars(d.statusCounts)}
+        <h3 style="margin-top:16px">Customer segments</h3>
+        <p>${Object.entries(d.segments).map(([k, v]) => `<a href="#/customers?segment=${esc(k)}">${segBadge(k)}</a> <b>${v}</b>&nbsp;&nbsp;`).join("")}</p></div>
     </div>
     <div class="card"><h3>Recent orders</h3>${ordersTable(d.recentOrders)}</div>
     <div class="grid two">
@@ -54,16 +128,26 @@ async function dashboardView() {
 }
 
 async function customersView() {
-  $view.innerHTML = `<h2>Customers</h2><input id="search" placeholder="Search by name or email..." /><div class="card" id="list"></div>`;
-  const load = async (q = "") => {
-    const rows = await api("/customers?search=" + encodeURIComponent(q));
+  const initialSeg = new URLSearchParams((location.hash.split("?")[1]) || "").get("segment") || "";
+  $view.innerHTML = `<h2>Customers</h2>
+    <div class="toolbar">
+      <input id="search" placeholder="Search by name or email..." />
+      <select id="segment">${["", "vip", "at-risk", "new", "regular"].map((v) => `<option value="${v}" ${v === initialSeg ? "selected" : ""}>${v ? v : "All segments"}</option>`).join("")}</select>
+      <select id="sort"><option value="recent">Newest</option><option value="spent">Top spenders</option><option value="orders">Most orders</option></select>
+    </div><div class="card" id="list"></div>`;
+  let page = 1;
+  const load = async () => {
+    const q = new URLSearchParams({ search: document.getElementById("search").value, segment: document.getElementById("segment").value, sort: document.getElementById("sort").value, page, pageSize: 10 });
+    const p = await api("/customers?" + q);
     document.getElementById("list").innerHTML = `<table>
-      <tr><th>Name</th><th>Email</th><th>Orders</th><th>Spent</th><th>Tags</th></tr>
-      ${rows.map((c) => `<tr class="click" data-href="#/customers/${c.id}"><td>${esc(fullName(c))}</td><td>${esc(c.email)}</td>
-        <td>${c.order_count}</td><td>${money(c.total_spent)}</td><td>${tagList(c.tags).map((t) => `<span class="tag">${esc(t)}</span>`).join("")}</td></tr>`).join("") || `<tr><td colspan="5" class="muted">No customers found</td></tr>`}</table>`;
+      <tr><th>Name</th><th>Email</th><th>Segment</th><th>Orders</th><th>Spent</th><th>Tags</th></tr>
+      ${p.items.map((c) => `<tr class="click" data-href="#/customers/${c.id}"><td>${esc(fullName(c))}</td><td>${esc(c.email)}</td><td>${segBadge(c.segment)}</td>
+        <td>${c.order_count}</td><td>${money(c.total_spent)}</td><td>${tagList(c.tags).map((t) => `<span class="tag">${esc(t)}</span>`).join("")}</td></tr>`).join("") || `<tr><td colspan="6" class="muted">No customers found</td></tr>`}</table>` +
+      pager(p, (n) => { page = n; load(); });
   };
   let timer;
-  document.getElementById("search").addEventListener("input", (e) => { clearTimeout(timer); timer = setTimeout(() => load(e.target.value), 250); });
+  document.getElementById("search").addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => { page = 1; load(); }, 250); });
+  ["segment", "sort"].forEach((id) => document.getElementById(id).addEventListener("change", () => { page = 1; load(); }));
   await load();
 }
 
@@ -72,7 +156,7 @@ async function customerView(id) {
   const currency = c.orders[0]?.currency;
   $view.innerHTML = `
     <a class="back" href="#/customers">&larr; Customers</a>
-    <h2>${esc(fullName(c))}</h2>
+    <h2>${esc(fullName(c))} ${segBadge(c.segment)}</h2>
     <div class="grid two">
       <div class="card"><h3>Profile</h3>
         <p>${esc(c.email)}<br>${esc(c.phone || "no phone")}<br><span class="muted">${esc(c.address || "no address")}</span></p>
@@ -84,6 +168,10 @@ async function customerView(id) {
       <div class="card ai"><h3>AI assistant</h3>
         <button id="aiSummary">Generate AI summary</button>
         <div id="aiOut" class="muted" style="margin-top:10px">Summary and next best action will appear here.</div>
+        <hr style="border:0;border-top:1px solid #ddd6fe;margin:14px 0">
+        <b>Triage a customer message</b>
+        <textarea id="triageMsg" rows="3" placeholder="Paste what the customer wrote..."></textarea>
+        <button id="triageBtn">Run triage agent</button>
       </div>
     </div>
     <div class="card"><h3>Order history</h3>${ordersTable(c.orders, false)}</div>
@@ -129,6 +217,10 @@ async function customerView(id) {
     if (!$("msgSubject").value) $("msgSubject").value = "Following up on your order";
     toast(`Draft ready (${r.source}). Review before sending.`);
   });
+  $("triageBtn").onclick = run($("triageBtn"), async () => {
+    await api("/triage", { method: "POST", body: { message: $("triageMsg").value, customerId: Number(id) } });
+    toast("Triage ready: review it in the AI Triage queue"); location.hash = "#/triage";
+  });
   $("aiSummary").onclick = run($("aiSummary"), async () => {
     $("aiOut").textContent = "Thinking...";
     const r = await api(`/customers/${id}/ai-summary`, { method: "POST", body: {} });
@@ -137,8 +229,19 @@ async function customerView(id) {
 }
 
 async function ordersView() {
-  $view.innerHTML = `<h2>Orders</h2><div class="card" id="olist"></div>`;
-  document.getElementById("olist").innerHTML = ordersTable(await api("/orders"));
+  const statuses = ["", "processing", "completed", "on-hold", "pending", "cancelled", "refunded", "failed"];
+  $view.innerHTML = `<h2>Orders</h2><div class="toolbar"><input id="osearch" placeholder="Search order #, name or email..." />
+    <select id="ostatus">${statuses.map((v) => `<option value="${v}">${v || "All statuses"}</option>`).join("")}</select></div><div class="card" id="olist"></div>`;
+  let page = 1;
+  const load = async () => {
+    const q = new URLSearchParams({ search: document.getElementById("osearch").value, status: document.getElementById("ostatus").value, page, pageSize: 10 });
+    const p = await api("/orders?" + q);
+    document.getElementById("olist").innerHTML = ordersTable(p.items) + pager(p, (n) => { page = n; load(); });
+  };
+  let timer;
+  document.getElementById("osearch").addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => { page = 1; load(); }, 250); });
+  document.getElementById("ostatus").addEventListener("change", () => { page = 1; load(); });
+  await load();
 }
 
 async function orderView(id) {
@@ -157,15 +260,100 @@ async function orderView(id) {
     </div>`;
 }
 
+
+async function triageView() {
+  const items = await api("/triage");
+  const pc = document.getElementById("triageCount");
+  pc.hidden = !items.length; pc.textContent = items.length;
+  $view.innerHTML = `<h2>AI Triage queue</h2>
+    <div class="card"><h3>New message</h3>
+      <input id="tEmail" placeholder="Customer email (so the agent can look up their orders)" />
+      <textarea id="tMsg" rows="3" placeholder="Paste the customer's message..."></textarea>
+      <button id="tRun">Run triage agent</button>
+      <p class="muted">The agent classifies the message, looks up the customer's orders with tools and drafts a reply. Nothing is sent until you approve.</p></div>
+    ${items.map((t) => `<div class="triage-item ${esc(t.urgency)}" data-id="${t.id}">
+      <b>${esc(t.category)}</b> &middot; ${esc(t.urgency)} urgency &middot; <span class="muted">${t.email ? esc(t.email) : "unknown customer"} &middot; source: ${esc(t.source)}</span>
+      <p><i>"${esc(t.message)}"</i></p><p>${esc(t.summary)}</p>
+      <div class="steps">Agent steps: ${t.steps.map((s) => esc(s.tool)).join(" &rarr; ") || "none"}</div>
+      <textarea rows="5" class="draft">${esc(t.draft_reply)}</textarea>
+      ${t.suggested_task ? `<p class="muted">Will also create task: ${esc(t.suggested_task)}</p>` : ""}
+      <button class="approve">Approve &amp; send</button><button class="danger reject">Reject</button></div>`).join("") || '<div class="card muted">Nothing waiting for approval.</div>'}`;
+  document.getElementById("tRun").onclick = async (e) => {
+    e.target.disabled = true;
+    try {
+      await api("/triage", { method: "POST", body: { message: document.getElementById("tMsg").value, email: document.getElementById("tEmail").value || undefined } });
+      toast("Triage ready"); route();
+    } catch (err) { toast(err.message); e.target.disabled = false; }
+  };
+  $view.querySelectorAll(".triage-item").forEach((el) => {
+    const id = el.dataset.id;
+    el.querySelector(".approve").onclick = async () => {
+      try { const r = await api(`/triage/${id}/approve`, { method: "POST", body: { body: el.querySelector(".draft").value } }); toast(`Approved (email ${r.email})`); route(); } catch (err) { toast(err.message); }
+    };
+    el.querySelector(".reject").onclick = async () => {
+      try { await api(`/triage/${id}/reject`, { method: "POST", body: {} }); route(); } catch (err) { toast(err.message); }
+    };
+  });
+}
+
+async function tasksView() {
+  const tasks = await api("/tasks");
+  $view.innerHTML = `<h2>Tasks</h2>
+    <div class="card"><div class="toolbar"><input id="taskTitle" placeholder="New task..." /><button id="taskAdd">Add</button></div>
+    <table><tr><th>Task</th><th>Customer</th><th>Source</th><th></th></tr>
+    ${tasks.map((t) => `<tr><td>${esc(t.title)}</td><td>${t.customer_id ? `<a href="#/customers/${t.customer_id}">${esc(fullName(t))}</a>` : "-"}</td><td><span class="tag">${esc(t.source)}</span></td>
+      <td><button class="secondary done" data-id="${t.id}">Done</button></td></tr>`).join("") || '<tr><td colspan="4" class="muted">No open tasks.</td></tr>'}</table></div>`;
+  document.getElementById("taskAdd").onclick = async () => {
+    try { await api("/tasks", { method: "POST", body: { title: document.getElementById("taskTitle").value } }); route(); } catch (err) { toast(err.message); }
+  };
+  $view.querySelectorAll(".done").forEach((b) => (b.onclick = async () => { await api(`/tasks/${b.dataset.id}/complete`, { method: "POST", body: {} }); route(); }));
+}
+
+async function teamView() {
+  if (!isAdmin()) { $view.innerHTML = '<div class="card">Admins only.</div>'; return; }
+  const users = await api("/auth/users");
+  $view.innerHTML = `<h2>Team &amp; Admin</h2>
+    <div class="grid two">
+      <div class="card"><h3>Automation</h3>
+        <button id="syncBtn">Sync orders from WooCommerce</button>
+        <button class="secondary" id="followBtn">Run delayed-order follow-ups</button>
+        <p class="muted">Sync imports existing customers and orders silently (no emails). Follow-ups email each delayed order once and open a task.</p><div id="adminOut"></div></div>
+      <div class="card"><h3>Add staff member</h3>
+        <input id="uName" placeholder="Name" /><input id="uEmail" placeholder="Email" /><input id="uPass" type="password" placeholder="Password (8+ chars)" />
+        <select id="uRole"><option value="staff">staff</option><option value="admin">admin</option></select> <button id="uAdd">Create user</button></div>
+    </div>
+    <div class="card"><h3>Users</h3><table><tr><th>Name</th><th>Email</th><th>Role</th></tr>
+      ${users.map((u) => `<tr><td>${esc(u.name)}</td><td>${esc(u.email)}</td><td><span class="tag">${esc(u.role)}</span></td></tr>`).join("")}</table></div>`;
+  const out = (msg) => (document.getElementById("adminOut").textContent = msg);
+  document.getElementById("syncBtn").onclick = async (e) => {
+    e.target.disabled = true; out("Syncing...");
+    try { const r = await api("/admin/sync/woocommerce", { method: "POST", body: {} }); out(`Fetched ${r.fetched}, imported ${r.imported}, skipped ${r.skipped}.`); } catch (err) { out(err.message); }
+    e.target.disabled = false;
+  };
+  document.getElementById("followBtn").onclick = async () => {
+    try { const r = await api("/admin/automation/followups", { method: "POST", body: {} }); out(`Checked ${r.checked}, notified ${r.notified}, skipped ${r.skipped}.`); } catch (err) { out(err.message); }
+  };
+  document.getElementById("uAdd").onclick = async () => {
+    try {
+      await api("/auth/users", { method: "POST", body: { name: document.getElementById("uName").value, email: document.getElementById("uEmail").value, password: document.getElementById("uPass").value, role: document.getElementById("uRole").value } });
+      toast("User created"); route();
+    } catch (err) { toast(err.message); }
+  };
+}
+
 /* ---------- router ---------- */
 async function route() {
   const hash = location.hash || "#/";
-  const [, page, id] = hash.split("/");
+  const [, pageRaw, id] = hash.split("?")[0].split("/");
+  const page = pageRaw;
   document.querySelectorAll("[data-nav]").forEach((a) => a.classList.toggle("active", a.dataset.nav === (page || "dashboard")));
   try {
     if (!page) await dashboardView();
     else if (page === "customers") await (id ? customerView(id) : customersView());
     else if (page === "orders") await (id ? orderView(id) : ordersView());
+    else if (page === "triage") await triageView();
+    else if (page === "tasks") await tasksView();
+    else if (page === "team") await teamView();
     else $view.innerHTML = "<p>Page not found.</p>";
   } catch (e) {
     $view.innerHTML = `<div class="card"><b>Something went wrong</b><p class="muted">${esc(e.message)}</p></div>`;
@@ -176,5 +364,5 @@ document.addEventListener("click", (e) => {
   const row = e.target.closest("[data-href]");
   if (row) location.hash = row.dataset.href;
 });
-window.addEventListener("hashchange", route);
-route();
+window.addEventListener("hashchange", () => { if (me) route(); });
+boot();
