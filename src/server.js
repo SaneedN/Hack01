@@ -48,6 +48,7 @@ const app = createApp({
   customers, orders, communications, users, tasks, triage,
   events, email, ai, triageAgent, followUps, wooSync,
   authService: createAuthService({ secret: process.env.JWT_SECRET }),
+  allowRegistration: process.env.ALLOW_REGISTRATION !== "false",
   webhookSecret: process.env.WOO_WEBHOOK_SECRET,
   delayDays,
   healthCheck: async () => ({ customers: await customers.count() }),

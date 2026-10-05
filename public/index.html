@@ -10,10 +10,13 @@
   <div id="login" class="login" hidden>
     <div class="card login-box">
       <h2>Woo CRM</h2>
-      <p class="muted">Staff sign in</p>
+      <p class="muted" id="authTitle">Sign in</p>
+      <input id="regName" placeholder="Full name" autocomplete="name" hidden />
       <input id="loginEmail" type="email" placeholder="Email" autocomplete="username" />
       <input id="loginPassword" type="password" placeholder="Password" autocomplete="current-password" />
+      <input id="regPassword2" type="password" placeholder="Confirm password" autocomplete="new-password" hidden />
       <button id="loginBtn">Sign in</button>
+      <p class="muted" style="margin:10px 0 0"><span id="authSwitchText">New here?</span> <a href="#" id="authSwitch">Create an account</a></p>
       <p id="loginError" class="error"></p>
     </div>
   </div>

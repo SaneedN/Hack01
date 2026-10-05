@@ -20,7 +20,7 @@ async function api(path, opts = {}) {
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
-  if (res.status === 401 && !path.startsWith("/auth/login")) { showLogin(); throw new Error("Please sign in"); }
+  if (res.status === 401 && !path.startsWith("/auth/login") && !path.startsWith("/auth/register")) { showLogin(); throw new Error("Please sign in"); }
   if (!res.ok) throw new Error(data.error || res.statusText);
   return data;
 }
@@ -71,13 +71,36 @@ async function boot() {
   document.getElementById("teamNav").hidden = !isAdmin();
   route();
 }
+let registerMode = false;
+function setAuthMode(reg) {
+  registerMode = reg;
+  document.getElementById("authTitle").textContent = reg ? "Create your account" : "Sign in";
+  document.getElementById("loginBtn").textContent = reg ? "Register" : "Sign in";
+  document.getElementById("authSwitchText").textContent = reg ? "Already have an account?" : "New here?";
+  document.getElementById("authSwitch").textContent = reg ? "Sign in" : "Create an account";
+  document.getElementById("regName").hidden = !reg;
+  document.getElementById("regPassword2").hidden = !reg;
+  document.getElementById("loginError").textContent = "";
+}
+document.getElementById("authSwitch").onclick = (e) => { e.preventDefault(); setAuthMode(!registerMode); };
+
 document.getElementById("loginBtn").onclick = async () => {
   const err = document.getElementById("loginError");
   err.textContent = "";
+  const email = document.getElementById("loginEmail").value;
+  const password = document.getElementById("loginPassword").value;
   try {
-    const r = await api("/auth/login", { method: "POST", body: { email: document.getElementById("loginEmail").value, password: document.getElementById("loginPassword").value } });
+    let r;
+    if (registerMode) {
+      if (password !== document.getElementById("regPassword2").value) { err.textContent = "Passwords do not match"; return; }
+      r = await api("/auth/register", { method: "POST", body: { name: document.getElementById("regName").value, email, password } });
+    } else {
+      r = await api("/auth/login", { method: "POST", body: { email, password } });
+    }
     token = r.token; localStorage.setItem("crm_token", token);
     document.getElementById("loginPassword").value = "";
+    document.getElementById("regPassword2").value = "";
+    setAuthMode(false);
     boot();
   } catch (e) { err.textContent = e.message; }
 };

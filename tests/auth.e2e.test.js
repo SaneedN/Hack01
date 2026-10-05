@@ -46,6 +46,32 @@ describe("auth & roles", () => {
   });
 });
 
+describe("self-registration", () => {
+  const reg = (app, over = {}) => request(app).post("/api/auth/register").send({ name: "Pat", email: "pat@x.com", password: "password123", ...over });
+
+  test("first account becomes admin, later ones staff, and the new token works", async () => {
+    const repos = createMemoryRepos();
+    const app = createApp({ ...repos, events: createEventBus(), webhookSecret: "s", email: {}, ai: {}, authService: createAuthService({ secret: "t" }) });
+    const first = await reg(app);
+    expect(first.status).toBe(201);
+    expect(first.body.user.role).toBe("admin");
+    const second = await reg(app, { email: "lee@x.com" });
+    expect(second.body.user.role).toBe("staff");
+    expect((await request(app).get("/api/customers").set(bearer(second.body.token))).status).toBe(200);
+    expect((await reg(app)).status).toBe(409);
+    expect((await reg(app, { email: "z@x.com", password: "short" })).status).toBe(400);
+  });
+
+  test("can be closed with allowRegistration=false (except for the very first account)", async () => {
+    const { app } = await build();
+    expect((await reg(app)).status).toBe(201); // default open
+    const repos = createMemoryRepos();
+    const closed = createApp({ ...repos, events: createEventBus(), webhookSecret: "s", email: {}, ai: {}, allowRegistration: false, authService: createAuthService({ secret: "t" }) });
+    expect((await reg(closed)).status).toBe(201);
+    expect((await reg(closed, { email: "b@x.com" })).status).toBe(403);
+  });
+});
+
 describe("AI triage approval flow", () => {
   test("nothing is emailed until a human approves", async () => {
     const { app, repos, sent } = await build();

@@ -38,7 +38,7 @@ function createApp(deps) {
   // Auth: when an authService is provided every /api route except login requires a valid JWT.
   // (Omitting it leaves the API open: only used by unit/e2e tests that don't care about auth.)
   if (authService) {
-    app.use("/api/auth", authRouter({ users, authService }));
+    app.use("/api/auth", authRouter({ users, authService, allowRegistration: deps.allowRegistration !== false }));
     app.use("/api", requireAuth(authService));
   }
   const adminOnly = authService ? [requireRole()] : [];
